@@ -1,24 +1,20 @@
-name: Fetch Kuala Lumpur Weather
+name: KL Weather
 
 on:
   schedule:
-    # 6 AM and 12 PM Malaysia time (UTC+8)
-    - cron: "0 22 * * *"   # 6 AM MYT = 22:00 UTC previous day
-    - cron: "0 4 * * *"    # 12 PM MYT = 04:00 UTC
-  workflow_dispatch: {}
+    - cron: "0 22 * * *"
+    - cron: "0 4 * * *"
+  workflow_dispatch:
 
 jobs:
   fetch-weather:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Fetch weather for Kuala Lumpur
+      - name: Fetch weather
         id: weather
         run: |
           JSON=$(curl -s "wttr.in/Kuala+Lumpur?format=j1")
-
-          # Get current condition code and map to emoji
-          CODE=$(echo "$JSON" | jq -r '.current_condition[0].weatherCode')
+          CODE=$(echo "$JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['current_condition'][0]['weatherCode'])")
           case "$CODE" in
             113) ICON="☀️";  LABEL="Sunny" ;;
             116) ICON="⛅";  LABEL="Partly cloudy" ;;
@@ -28,17 +24,12 @@ jobs:
             179|182|185|227|230|248|260|263|266|281|284|311|314|317|320|323|326|329|332|335|338|350|353|356|359|362|365|368|371|374|377|386|389) ICON="⛈️"; LABEL="Storm" ;;
             *)   ICON="🌤️";  LABEL="Unknown" ;;
           esac
-
-          TEMP=$(echo "$JSON" | jq -r '.current_condition[0].temp_C')
+          TEMP=$(echo "$JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['current_condition'][0]['temp_C'])")
           DATE=$(TZ="Asia/Kuala_Lumpur" date +"%A, %d %B %Y — %I:%M %p MYT")
-
           MSG="${ICON} <b>${LABEL}</b> — ${TEMP}°C
 
 ${DATE}"
-
-          echo "message<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MSG" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "message=${MSG}" >> "$GITHUB_OUTPUT"
 
       - name: Send to Telegram
         uses: appleboy/telegram-action@master
