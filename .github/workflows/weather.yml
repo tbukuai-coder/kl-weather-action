@@ -2,6 +2,7 @@ name: KL Weather
 
 on:
   schedule:
+    # 6 AM MYT = 22:00 UTC | 12 PM MYT = 04:00 UTC
     - cron: "0 22,4 * * *"
   workflow_dispatch:
 
@@ -24,56 +25,34 @@ jobs:
           rain_codes = {"176","293","296","299","302","305","308"}
           storm_codes = {"179","182","185","227","230","248","260","263","266","281","284","311","314","317","320","323","326","329","332","335","338","350","353","356","359","362","365","368","371","374","377","386","389"}
 
-          if code == "113":      icon, label = "☀️", "Sunny"
-          elif code == "116":    icon, label = "⛅", "Partly cloudy"
+          if code == "113":           icon, label = "☀️", "Sunny"
+          elif code == "116":         icon, label = "⛅", "Partly cloudy"
           elif code in ("119","122"): icon, label = "☁️", "Cloudy"
-          elif code == "143":    icon, label = "🌫️", "Misty"
-          elif code in rain_codes:  icon, label = "🌧️", "Rain"
-          elif code in storm_codes: icon, label = "⛈️", "Storm"
-          else:                  icon, label = "🌤️", "Unknown"
+          elif code == "143":         icon, label = "🌫️", "Misty"
+          elif code in rain_codes:    icon, label = "🌧️", "Rain"
+          elif code in storm_codes:   icon, label = "⛈️", "Storm"
+          else:                       icon, label = "🌤️", "Unknown"
 
           temp = cc["temp_C"]
 
-          date_str = subprocess.check_output(
-              ["date", "+%A, %d %B %Y — %I:%M %p MYT"],
-              env={**os.environ, "TZ": "Asia/Kuala_Lumpur"}
-          ).decode().strip()
-
+          # Check rain chance for next hour
           hourly = data["weather"][0]["hourly"]
           cur_hour = int(subprocess.check_output(
               ["date", "+%H"],
               env={**os.environ, "TZ": "Asia/Kuala_Lumpur"}
           ).decode().strip())
+          next_idx = (cur_hour + 1) // 3
+          rain_chance = int(hourly[next_idx]["chanceofrain"]) if next_idx < len(hourly) else 0
 
-          rain_forecast = []
-          umbrella = False
-          umbrella_chance = 0
-          for off in [1, 2, 3]:
-              idx = (cur_hour + off) // 3
-              if idx < len(hourly):
-                  chance = hourly[idx]["chanceofrain"]
-                  hour_label = f"{(cur_hour + off) % 24:02d}:00"
-                  rain_forecast.append(f"{hour_label} — 🌧️{chance}%")
-                  if int(chance) > 50 and not umbrella:
-                      umbrella = True
-                      umbrella_chance = chance
+          lines = [f"{icon} <b>{label}</b> — {temp}°C"]
 
-          lines = [
-              f"{icon} <b>{label}</b> — {temp}°C",
-              "",
-              date_str,
-              "",
-              "<b>Rain forecast (next 3h):</b>",
-              "  ".join(rain_forecast),
-          ]
-          if umbrella:
-              lines += ["", f"☂️ <b>Bring an umbrella!</b> {umbrella_chance}% rain expected soon."]
+          if rain_chance > 50:
+              lines.append(f"☂️ Bring an umbrella! {rain_chance}% rain expected in the next hour.")
 
           msg = "\n".join(lines)
 
           delim = os.urandom(4).hex()
-          github_output = os.environ.get("GITHUB_OUTPUT", "")
-          with open(github_output, "a") as f:
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"message<<{delim}\n{msg}\n{delim}\n")
           PYEOF
 
