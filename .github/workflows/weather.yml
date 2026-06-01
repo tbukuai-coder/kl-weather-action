@@ -2,8 +2,7 @@ name: KL Weather
 
 on:
   schedule:
-    - cron: "0 22 * * *"
-    - cron: "0 4 * * *"
+    - cron: "0 22,4 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,26 +13,69 @@ jobs:
         id: weather
         run: |
           JSON=$(curl -s "wttr.in/Kuala+Lumpur?format=j1")
-          CODE=$(echo "$JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['current_condition'][0]['weatherCode'])")
-          case "$CODE" in
-            113) ICON="☀️";  LABEL="Sunny" ;;
-            116) ICON="⛅";  LABEL="Partly cloudy" ;;
-            119|122) ICON="☁️"; LABEL="Cloudy" ;;
-            143) ICON="🌫️";  LABEL="Misty" ;;
-            176|293|296|299|302|305|308) ICON="🌧️"; LABEL="Rain" ;;
-            179|182|185|227|230|248|260|263|266|281|284|311|314|317|320|323|326|329|332|335|338|350|353|356|359|362|365|368|371|374|377|386|389) ICON="⛈️"; LABEL="Storm" ;;
-            *)   ICON="🌤️";  LABEL="Unknown" ;;
-          esac
-          TEMP=$(echo "$JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['current_condition'][0]['temp_C'])")
-          DATE=$(TZ="Asia/Kuala_Lumpur" date +"%A, %d %B %Y — %I:%M %p MYT")
-          DELIM=$(openssl rand -hex 8)
-          {
-            echo "message<<${DELIM}"
-            echo "${ICON} <b>${LABEL}</b> — ${TEMP}°C"
-            echo ""
-            echo "${DATE}"
-            echo "${DELIM}"
-          } >> "$GITHUB_OUTPUT"
+          export JSON
+          python3 << 'PYEOF'
+          import json, subprocess, os
+
+          data = json.loads(os.environ["JSON"])
+          cc = data["current_condition"][0]
+          code = cc["weatherCode"]
+
+          rain_codes = {"176","293","296","299","302","305","308"}
+          storm_codes = {"179","182","185","227","230","248","260","263","266","281","284","311","314","317","320","323","326","329","332","335","338","350","353","356","359","362","365","368","371","374","377","386","389"}
+
+          if code == "113":      icon, label = "☀️", "Sunny"
+          elif code == "116":    icon, label = "⛅", "Partly cloudy"
+          elif code in ("119","122"): icon, label = "☁️", "Cloudy"
+          elif code == "143":    icon, label = "🌫️", "Misty"
+          elif code in rain_codes:  icon, label = "🌧️", "Rain"
+          elif code in storm_codes: icon, label = "⛈️", "Storm"
+          else:                  icon, label = "🌤️", "Unknown"
+
+          temp = cc["temp_C"]
+
+          date_str = subprocess.check_output(
+              ["date", "+%A, %d %B %Y — %I:%M %p MYT"],
+              env={**os.environ, "TZ": "Asia/Kuala_Lumpur"}
+          ).decode().strip()
+
+          hourly = data["weather"][0]["hourly"]
+          cur_hour = int(subprocess.check_output(
+              ["date", "+%H"],
+              env={**os.environ, "TZ": "Asia/Kuala_Lumpur"}
+          ).decode().strip())
+
+          rain_forecast = []
+          umbrella = False
+          umbrella_chance = 0
+          for off in [1, 2, 3]:
+              idx = (cur_hour + off) // 3
+              if idx < len(hourly):
+                  chance = hourly[idx]["chanceofrain"]
+                  hour_label = f"{(cur_hour + off) % 24:02d}:00"
+                  rain_forecast.append(f"{hour_label} — 🌧️{chance}%")
+                  if int(chance) > 50 and not umbrella:
+                      umbrella = True
+                      umbrella_chance = chance
+
+          lines = [
+              f"{icon} <b>{label}</b> — {temp}°C",
+              "",
+              date_str,
+              "",
+              "<b>Rain forecast (next 3h):</b>",
+              "  ".join(rain_forecast),
+          ]
+          if umbrella:
+              lines += ["", f"☂️ <b>Bring an umbrella!</b> {umbrella_chance}% rain expected soon."]
+
+          msg = "\n".join(lines)
+
+          delim = os.urandom(4).hex()
+          github_output = os.environ.get("GITHUB_OUTPUT", "")
+          with open(github_output, "a") as f:
+              f.write(f"message<<{delim}\n{msg}\n{delim}\n")
+          PYEOF
 
       - name: Send to Telegram
         uses: appleboy/telegram-action@master
