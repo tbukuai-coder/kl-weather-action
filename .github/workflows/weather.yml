@@ -26,7 +26,14 @@ jobs:
           esac
           TEMP=$(echo "$JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['current_condition'][0]['temp_C'])")
           DATE=$(TZ="Asia/Kuala_Lumpur" date +"%A, %d %B %Y — %I:%M %p MYT")
-          printf "message=%s <b>%s</b> — %s°C\n\n%s\n" "$ICON" "$LABEL" "$TEMP" "$DATE" >> "$GITHUB_OUTPUT"
+          DELIM=$(openssl rand -hex 8)
+          {
+            echo "message<<${DELIM}"
+            echo "${ICON} <b>${LABEL}</b> — ${TEMP}°C"
+            echo ""
+            echo "${DATE}"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Send to Telegram
         uses: appleboy/telegram-action@master
