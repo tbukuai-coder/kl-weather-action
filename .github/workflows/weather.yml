@@ -5,7 +5,7 @@ on:
     # 6 AM and 12 PM Malaysia time (UTC+8)
     - cron: "0 22 * * *"   # 6 AM MYT = 22:00 UTC previous day
     - cron: "0 4 * * *"    # 12 PM MYT = 04:00 UTC
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   fetch-weather:
