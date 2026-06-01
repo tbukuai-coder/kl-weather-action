@@ -13,24 +13,42 @@ jobs:
       - name: Fetch daily quote
         id: quote
         run: |
-          JSON=$(curl -s --max-time 10 "https://zenquotes.io/api/today")
-          export JSON
           python3 << 'PYEOF'
-          import json, os
+          import json, os, urllib.request, random
 
-          data = json.loads(os.environ["JSON"])[0]
-          quote = data["q"]
-          author = data["a"]
-          date = data.get("date", "")
+          quote = None
+          author = None
+
+          # Try zenquotes.io first (daily curated quote)
+          try:
+              req = urllib.request.Request("https://zenquotes.io/api/today",
+                  headers={"User-Agent": "Mozilla/5.0"})
+              with urllib.request.urlopen(req, timeout=8) as resp:
+                  data = json.loads(resp.read())[0]
+                  quote = data["q"]
+                  author = data["a"]
+          except Exception:
+              pass
+
+          # Fallback: type.fit random quote
+          if not quote:
+              try:
+                  req = urllib.request.Request("https://type.fit/api/quotes",
+                      headers={"User-Agent": "Mozilla/5.0"})
+                  with urllib.request.urlopen(req, timeout=8) as resp:
+                      quotes = json.loads(resp.read())
+                      q = random.choice(quotes)
+                      quote = q["text"]
+                      author = q.get("author", "Unknown")
+              except Exception:
+                  quote = "The only way to do great work is to love what you do."
+                  author = "Steve Jobs"
 
           lines = [
               "💬 <i>\"{}\"</i>".format(quote),
               "",
               "— <b>{}</b>".format(author),
           ]
-          if date:
-              lines.append("")
-              lines.append("📅 {}".format(date))
 
           msg = "\n".join(lines)
 
