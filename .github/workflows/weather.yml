@@ -5,6 +5,7 @@ on:
     - cron: "0 22 * * *"
     - cron: "0 4 * * *"
   workflow_dispatch:
+    inputs: {}
 
 jobs:
   fetch-weather:
