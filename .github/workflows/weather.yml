@@ -12,38 +12,85 @@ jobs:
 
     steps:
       - name: Fetch weather for Kuala Lumpur
+        id: weather
         run: |
-          echo "=== 🌤️ Kuala Lumpur Weather — $(date -u +%Y-%m-%d) ==="
-          curl -s "wttr.in/Kuala+Lumpur?format=j1" | jq '{
-            location: .nearest_area[0].areaName[0].value,
-            country:  .nearest_area[0].country[0].value,
-            temp_C:   .current_condition[0].temp_C,
-            feels_C:  .current_condition[0].FeelsLikeC,
-            humidity: .current_condition[0].humidity,
-            desc:     .current_condition[0].weatherDesc[0].value,
-            wind_kmph: .current_condition[0].windspeedKmph,
-            wind_dir:  .current_condition[0].winddir16Point,
-            visibility: .current_condition[0].visibility,
-            uv_index:   .current_condition[0].uvIndex,
-            forecasts: [.weather[] | {
-              date: .date,
-              max_C: .maxtempC,
-              min_C: .mintempC,
-              sunrise: .astronomy[0].sunrise,
-              sunset:  .astronomy[0].sunset,
-              hourly: [.hourly[] | {
-                time: .time,
-                temp_C: .tempC,
-                desc: .weatherDesc[0].value,
-                chance_of_rain: .chanceofrain,
-                humidity: .humidity
-              }]
-            }]
-          }' > weather.json
+          JSON=$(curl -s "wttr.in/Kuala+Lumpur?format=j1")
+
+          # Extract current conditions
+          TEMP=$(echo "$JSON" | jq -r '.current_condition[0].temp_C')
+          FEELS=$(echo "$JSON" | jq -r '.current_condition[0].FeelsLikeC')
+          HUMIDITY=$(echo "$JSON" | jq -r '.current_condition[0].humidity')
+          DESC=$(echo "$JSON" | jq -r '.current_condition[0].weatherDesc[0].value')
+          WIND_SPEED=$(echo "$JSON" | jq -r '.current_condition[0].windspeedKmph')
+          WIND_DIR=$(echo "$JSON" | jq -r '.current_condition[0].winddir16Point')
+          UV=$(echo "$JSON" | jq -r '.current_condition[0].uvIndex')
+          VISIBILITY=$(echo "$JSON" | jq -r '.current_condition[0].visibility')
+
+          # Weather emoji mapping
+          case "$DESC" in
+            *Sunny*|*Clear*) ICON="☀️" ;;
+            *Partly*cloudy*|*Cloudy*) ICON="⛅" ;;
+            *Overcast*) ICON="☁️" ;;
+            *Rain*|*Drizzle*|*shower*) ICON="🌧️" ;;
+            *Thunder*|*storm*) ICON="⛈️" ;;
+            *Fog*|*Mist*) ICON="🌫️" ;;
+            *Snow*) ICON="❄️" ;;
+            *) ICON="🌤️" ;;
+          esac
+
+          # Today's forecast
+          TODAY_MAX=$(echo "$JSON" | jq -r '.weather[0].maxtempC')
+          TODAY_MIN=$(echo "$JSON" | jq -r '.weather[0].mintempC')
+          SUNRISE=$(echo "$JSON" | jq -r '.weather[0].astronomy[0].sunrise')
+          SUNSET=$(echo "$JSON" | jq -r '.weather[0].astronomy[0].sunset')
+
+          # Tomorrow's forecast
+          TMR_MAX=$(echo "$JSON" | jq -r '.weather[1].maxtempC')
+          TMR_MIN=$(echo "$JSON" | jq -r '.weather[1].mintempC')
+          TMR_DESC=$(echo "$JSON" | jq -r '.weather[1].hourly[4].weatherDesc[0].value')
+
+          # Build hourly rain forecast (next 12 hours)
+          HOURLY=$(echo "$JSON" | jq -r '
+            .weather[0].hourly[:4] |
+            .[] | "\(.time | tonumber / 100 | tostring + ":00") — \(.tempC)°C \(.weatherDesc[0].value) 🌧️\(.chanceofrain)%"
+          ')
+
+          # Compose message
+          MSG="${ICON} <b>Kuala Lumpur Weather</b> — $(date -u +%Y-%m-%d)
+
+🌡️ <b>${DESC}</b>
+   Temp: <b>${TEMP}°C</b> (feels ${FEELS}°C)
+   📊 Today: ${TODAY_MIN}°C – ${TODAY_MAX}°C
+   💧 Humidity: ${HUMIDITY}%
+   💨 Wind: ${WIND_SPEED} km/h ${WIND_DIR}
+   👁️ Visibility: ${VISIBILITY} km
+   ☀️ UV Index: ${UV}
+   🌅 Sunrise: ${SUNRISE} | Sunset: ${SUNSET}
+
+<b>⏰ Next few hours:</b>
+${HOURLY}
+
+<b>📅 Tomorrow:</b> ${TMR_MIN}°C – ${TMR_MAX}°C, ${TMR_DESC}"
+
+          # Save for next step
+          echo "message<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MSG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          # Also save full JSON artifact
+          echo "$JSON" | jq '.' > weather.json
 
           echo ""
           echo "=== Summary ==="
           curl -s "wttr.in/Kuala+Lumpur?format=%l:+%c+%t+(feels+%f),+Humidity:+%h,+Wind:+%w"
+
+      - name: Send to Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_GROUP_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: html
+          message: ${{ steps.weather.outputs.message }}
 
       - name: Upload weather artifact
         uses: actions/upload-artifact@v4
