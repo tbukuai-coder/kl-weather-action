@@ -5,7 +5,6 @@ on:
     - cron: "0 22 * * *"
     - cron: "0 4 * * *"
   workflow_dispatch:
-    inputs: {}
 
 jobs:
   fetch-weather:
@@ -27,10 +26,7 @@ jobs:
           esac
           TEMP=$(echo "$JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['current_condition'][0]['temp_C'])")
           DATE=$(TZ="Asia/Kuala_Lumpur" date +"%A, %d %B %Y — %I:%M %p MYT")
-          MSG="${ICON} <b>${LABEL}</b> — ${TEMP}°C
-
-${DATE}"
-          echo "message=${MSG}" >> "$GITHUB_OUTPUT"
+          printf "message=%s <b>%s</b> — %s°C\n\n%s\n" "$ICON" "$LABEL" "$TEMP" "$DATE" >> "$GITHUB_OUTPUT"
 
       - name: Send to Telegram
         uses: appleboy/telegram-action@master
