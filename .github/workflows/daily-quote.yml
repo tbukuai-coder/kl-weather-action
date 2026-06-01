@@ -13,24 +13,41 @@ jobs:
       - name: Fetch daily quote
         id: quote
         run: |
-          JSON=$(curl -s --max-time 10 "https://zenquotes.io/api/today")
-          export JSON
+          # Fetch English quote (zenquotes)
+          EN_JSON=$(curl -s --max-time 10 "https://zenquotes.io/api/today")
+
+          # Fetch Chinese quote (xygeng.cn)
+          CN_JSON=$(curl -s --max-time 10 "https://api.xygeng.cn/one")
+
+          export EN_JSON CN_JSON
+
           python3 << 'PYEOF'
           import json, os
 
-          data = json.loads(os.environ["JSON"])[0]
-          quote = data["q"]
-          author = data["a"]
-          date = data.get("date", "")
+          # Parse English quote
+          en_data = json.loads(os.environ["EN_JSON"])[0]
+          en_quote = en_data["q"]
+          en_author = en_data["a"]
+
+          # Parse Chinese quote
+          cn_data = json.loads(os.environ["CN_JSON"])["data"]
+          cn_quote = cn_data["content"]
+          cn_origin = cn_data.get("origin", "")
+          cn_name = cn_data.get("name", "")
 
           lines = [
-              "💬 <i>\"{}\"</i>".format(quote),
+              "💬 <i>\"{}\"</i>".format(en_quote),
               "",
-              "— <b>{}</b>".format(author),
+              "— <b>{}</b>".format(en_author),
+              "",
+              "━━━━━━━━━━━━━━",
+              "",
+              "📖 「{}」".format(cn_quote),
           ]
-          if date:
-              lines.append("")
-              lines.append("📅 {}".format(date))
+          if cn_origin:
+              lines.append("— 《{}》".format(cn_origin))
+          elif cn_name and cn_name != "佚名":
+              lines.append("— {}".format(cn_name))
 
           msg = "\n".join(lines)
 
