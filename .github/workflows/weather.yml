@@ -3,7 +3,7 @@ name: KL Weather
 on:
   schedule:
     # 6 AM MYT = 22:00 UTC | 12 PM MYT = 04:00 UTC
-    - cron: "0 22,4 * * *"
+    - cron: "0 4,22 * * *"
   workflow_dispatch:
 
 jobs:
